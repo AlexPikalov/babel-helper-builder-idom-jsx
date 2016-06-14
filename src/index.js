@@ -64,7 +64,7 @@ export default function (opts) {
         let attrs = convertAttributes(path);
         let openingElement = path.node.openingElement;
 
-        return t.callExpression(t.identifier('elementVoid'), [t.stringLiteral(openingElement.name.name), t.stringLiteral(path.scope.generateUidIdentifier('voidEl')), t.arrayExpression(attrs.staticAttrs), ...attrs.dynamicAttrs]);
+        return t.callExpression(t.identifier('elementVoid'), [t.stringLiteral(openingElement.name.name), t.stringLiteral(path.scope.generateUidIdentifier('voidEl').name), t.arrayExpression(attrs.staticAttrs), ...attrs.dynamicAttrs]);
     }
 
     function buildElement(path) {
@@ -72,7 +72,7 @@ export default function (opts) {
         let openingElement = path.node.openingElement;
 
         return [
-            t.callExpression(t.identifier('elementOpen'), [t.stringLiteral(openingElement.name.name), t.stringLiteral(path.scope.generateUidIdentifier('el')), t.arrayExpression(attrs.staticAttrs), ...attrs.dynamicAttrs]),
+            t.callExpression(t.identifier('elementOpen'), [t.stringLiteral(openingElement.name.name), t.stringLiteral(path.scope.generateUidIdentifier('el').name), t.arrayExpression(attrs.staticAttrs), ...attrs.dynamicAttrs]),
             ...flattenChildren(path.node.children),
             t.callExpression(t.identifier('elementClose'), [t.stringLiteral(openingElement.name.name)])
         ]
