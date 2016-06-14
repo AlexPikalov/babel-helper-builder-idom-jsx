@@ -1,6 +1,6 @@
 {
   "name": "babel-helper-builder-idom-jsx",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "",
   "repository": "https://github.com/AlexPikalov/babel-helper-builder-idom-jsx",
   "license": "MIT",
