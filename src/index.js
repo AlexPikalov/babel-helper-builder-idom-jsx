@@ -1,15 +1,6 @@
-import esutils from "esutils";
 import * as t from "babel-types";
 
-// type ElementState = {
-//   tagExpr: Object; // tag node
-//   tagName: string; // raw string tag name
-//   args: Array<Object>; // array of call arguments
-//   call?: Object; // optional call property that can be set to override the call expression returned
-//   pre?: Function; // function called with (state: ElementState) before building attribs
-//   post?: Function; // function called with (state: ElementState) after building attribs
-// };
-
+export const ID_ATTR = 'data-xid';
 
 export default function (opts) {
     let visitor = {};
@@ -20,25 +11,23 @@ export default function (opts) {
 
     visitor.JSXElement = {
         exit(path, file) {
-            let els = isVoidElement(path) ? [buildElementVoid(path)] : buildElement(path);
-            if (!t.isJSXElement(path.parentPath)) {
-                path.replaceWith(createPatchFn(path, els));
-            } else {
-                path.replaceWithMultiple(els);
-            }
+            let attrs = convertAttributes(path);
+            let elName = path.node.openingElement.name.name;
+            let el = isVoidElement(path) ? buildElementVoid(elName, attrs) : buildElement(elName, attrs, flattenChildren(path.node.children));
+            path.replaceWith(el);
         }
     };
 
     visitor.JSXText = {
         exit(path, file) {
-            path.replaceWith(buildText(path.node));
+            path.replaceWith(buildText(path.node.value));
         }
     };
 
     visitor.JSXExpressionContainer = {
         exit(path) {
             if (t.isJSXElement(path.parentPath)) {
-                let content = !t.isStringLiteral(path.node.expression) && !t.isNumericLiteral(path.node.expression)
+                let content = t.isCallExpression(path.node.expression) || t.isNewExpression(path.node.expression)
                     ? path.node.expression
                     : buildText(path.node.expression);
                 path.replaceWith(content);
@@ -52,30 +41,26 @@ export default function (opts) {
         return path.node.openingElement.selfClosing;
     }
 
-    function createPatchFn(path, children) {
-        return t.functionExpression(t.identifier(''), [], t.blockStatement(children.map(ch => t.expressionStatement(ch))));
+    function buildText(value) {
+        return t.newExpression(t.identifier('Text'), [t.stringLiteral(value)]);
     }
 
-    function buildText(node) {
-        return t.callExpression(t.identifier('text'), [t.stringLiteral(node.value.toString())]);
+    function buildElementVoid(el, attrs) {
+        let _attrs = t.objectExpression([
+            t.objectProperty(t.stringLiteral('staticAttrs'), t.arrayExpression(attrs.staticAttrs)),
+            t.objectProperty(t.stringLiteral('dynamicAttrs'), t.arrayExpression(attrs.dynamicAttrs))
+        ]);
+        let args = attrs.id ? [t.stringLiteral(el), _attrs, attrs.id] : [t.stringLiteral(el), _attrs]
+        return t.newExpression(t.identifier('ElVoid'), args);
     }
 
-    function buildElementVoid(path) {
-        let attrs = convertAttributes(path);
-        let openingElement = path.node.openingElement;
-
-        return t.callExpression(t.identifier('elementVoid'), [t.stringLiteral(openingElement.name.name), t.stringLiteral(path.scope.generateUidIdentifier('voidEl').name), t.arrayExpression(attrs.staticAttrs), ...attrs.dynamicAttrs]);
-    }
-
-    function buildElement(path) {
-        let attrs = convertAttributes(path);
-        let openingElement = path.node.openingElement;
-
-        return [
-            t.callExpression(t.identifier('elementOpen'), [t.stringLiteral(openingElement.name.name), t.stringLiteral(path.scope.generateUidIdentifier('el').name), t.arrayExpression(attrs.staticAttrs), ...attrs.dynamicAttrs]),
-            ...flattenChildren(path.node.children),
-            t.callExpression(t.identifier('elementClose'), [t.stringLiteral(openingElement.name.name)])
-        ]
+    function buildElement(el, attrs, children) {
+        let _attrs = t.objectExpression([
+            t.objectProperty(t.stringLiteral('staticAttrs'), t.arrayExpression(attrs.staticAttrs)),
+            t.objectProperty(t.stringLiteral('dynamicAttrs'), t.arrayExpression(attrs.dynamicAttrs))
+        ]);
+        let args = attrs.id ? [t.stringLiteral(el), _attrs, t.arrayExpression(children), attrs.id] : [t.stringLiteral(el), _attrs, t.arrayExpression(children)]
+        return t.newExpression(t.identifier('El'), args);
     }
 
     function flattenChildren(children) {
@@ -97,8 +82,14 @@ export default function (opts) {
         let dynamicAttrs = attrs
             .filter(node => t.isJSXExpressionContainer(node.value) && !t.isJSXSpreadAttribute(node))
             .reduce(flattenAttrs, []);
+        let id = attrs.reduce((_id, node) => {
+            if (node.name.name === ID_ATTR) {
+                return convertAttributeValue(node.value);
+            }
+            return _id;
+        }, null);
 
-        return {staticAttrs, dynamicAttrs};
+        return id ? {staticAttrs, dynamicAttrs, id} : {staticAttrs, dynamicAttrs};
 
         function flattenAttrs(memo, attr) {
             let name = t.stringLiteral(attr.name.name);
